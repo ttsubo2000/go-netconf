@@ -206,3 +206,93 @@ func TestWaitForBytesEmpty(t *testing.T) {
 		t.Errorf("WaitForBytes should error on empty input!")
 	}
 }
+
+// chunkReader は固定サイズのチャンクでデータを返し、最後に finalErr を返す io.Reader。
+// デリミタ欠損シナリオ（サーバがボディのみ送信して接続を切断）の再現に使用する。
+type chunkReader struct {
+	data     []byte
+	chunkSz  int
+	offset   int
+	finalErr error
+}
+
+func (r *chunkReader) Read(b []byte) (int, error) {
+	if r.offset >= len(r.data) {
+		return 0, r.finalErr
+	}
+	end := r.offset + r.chunkSz
+	if end > len(r.data) {
+		end = len(r.data)
+	}
+	n := copy(b, r.data[r.offset:end])
+	r.offset += n
+	return n, nil
+}
+
+// multiChunkReader は複数のチャンクを順番に返す io.Reader。
+// デリミタ分割シナリオ（TCPセグメント境界でデリミタが分断）の再現に使用する。
+type multiChunkReader struct {
+	chunks [][]byte
+	idx    int
+}
+
+func (r *multiChunkReader) Read(b []byte) (int, error) {
+	if r.idx >= len(r.chunks) {
+		return 0, io.EOF
+	}
+	n := copy(b, r.chunks[r.idx])
+	r.idx++
+	return n, nil
+}
+
+// TestWaitForFuncDelimiterMissing はデリミタなしでボディのみ送信された場合、
+// WaitForBytes がエラーを返すことを確認する（ループが無限継続しないことの検証）。
+func TestWaitForFuncDelimiterMissing(t *testing.T) {
+	body := `<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="1">
+<ok/>
+</rpc-reply>
+`
+	r := &chunkReader{
+		data:     []byte(body),
+		chunkSz:  32,
+		finalErr: io.ErrUnexpectedEOF,
+	}
+
+	var trans transportTest
+	trans.ReadWriteCloser = newNilCloser(r, new(bytes.Buffer))
+
+	_, err := trans.WaitForBytes([]byte(msgSeperator))
+	if err == nil {
+		t.Error("WaitForBytes should return error when delimiter is missing")
+	}
+}
+
+// TestWaitForFuncDelimiterSplit はデリミタ ]]>]]> がTCPセグメント境界で
+// ]]> + ]]> に分割されても正しく検出・組み立てできることを確認する。
+func TestWaitForFuncDelimiterSplit(t *testing.T) {
+	prefix := `<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="1">
+<ok/>
+</rpc-reply>
+`
+	delim := msgSeperator
+	splitAt := len(delim) / 2 // ]]> と ]]> に分割
+
+	chunks := [][]byte{
+		[]byte(prefix + delim[:splitAt]),
+		[]byte(delim[splitAt:]),
+	}
+
+	r := &multiChunkReader{chunks: chunks}
+	var trans transportTest
+	trans.ReadWriteCloser = newNilCloser(r, new(bytes.Buffer))
+
+	result, err := trans.WaitForBytes([]byte(delim))
+	if err != nil {
+		t.Fatalf("WaitForBytes failed unexpectedly: %v", err)
+	}
+
+	expected := []byte(prefix)
+	if !bytes.Equal(result, expected) {
+		t.Errorf("unexpected result:\nwant: %q\ngot:  %q", expected, result)
+	}
+}
