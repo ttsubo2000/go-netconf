@@ -129,7 +129,9 @@ func (t *TransportBasicIO) WaitForFunc(f func([]byte) (int, error)) ([]byte, err
 	buf := make([]byte, 8192)
 
 	pos := 0
+	iteration := 0
 	for {
+		iteration++
 		n, err := t.Read(buf[pos : pos+(len(buf)/2)])
 		if err != nil {
 			if err != io.EOF {
@@ -158,6 +160,9 @@ func (t *TransportBasicIO) WaitForFunc(f func([]byte) (int, error)) ([]byte, err
 				debugf("WaitForFunc: delimiter found, returning %d bytes", out.Len())
 				return out.Bytes(), nil
 			}
+
+			debugf("WaitForFunc: iteration=%d read=%d bytes total=%d delimiter not found",
+				iteration, n, out.Len()+pos+n)
 
 			if pos > 0 {
 				out.Write(buf[0:pos])

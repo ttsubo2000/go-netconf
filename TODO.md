@@ -13,9 +13,10 @@ go-netconf プロジェクトの改善タスク管理ファイル。
 
 | Issue | タイトル | ステータス | PR |
 |-------|---------|-----------|-----|
-| #5 | REQ-4: デリミタ欠損の再現環境整備（ループ可視化含む） | 未着手 | - |
+| #5 | REQ-4: デリミタ欠損の再現環境整備（ループ可視化含む） | 進行中 | - |
 | #6 | REQ-5: デリミタ欠損への対策実装 | 未着手（着手時に設計方式を相談） | - |
 | #7 | REQ-6: デリミタ欠損対策のエビデンス取得 | 未着手 | - |
+| #8 | REQ-8: TestWaitForBytesEmpty 既存テスト失敗修正 | 未着手（REQ-4実装中に発覚、別Issue管理） | - |
 
 ### 背景・課題
 
@@ -38,6 +39,14 @@ go-netconf プロジェクトの改善タスク管理ファイル。
 - [ ] 設計方式を Issue コメントに記載
 - [ ] 対策実装
 - [ ] feature/req-6-delimiter-split-fix ブランチで PR 作成 → phase/1 にマージ
+
+### REQ-8: TestWaitForBytesEmpty 既存テスト失敗修正 (Issue #8)
+
+**発覚経緯**: REQ-4（Issue #5）実装中に発見。PR #118（e572641）が `WaitForFunc` の EOF 処理を変更した際に壊れ、CI未実行のため長期間気づかれなかった。
+
+- [ ] `WaitForFunc` の `n==0` 判定に `out.Len()==0 && pos==0` ガードを追加（B案）
+- [ ] `TestWaitForBytesEmpty` がパスすることを確認
+- [ ] feature/req-8-fix-wait-for-bytes-empty ブランチで PR 作成 → phase/1 にマージ
 
 ### REQ-7: デリミタ欠損対策のエビデンス取得 (Issue #7)
 
